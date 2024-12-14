@@ -2,11 +2,9 @@ use crate::code::AnsiCode;
 use nom::{
     branch::alt,
     bytes::complete::*,
-    character::complete::*,
-    character::is_alphabetic,
+    character::{complete::*, is_alphabetic},
     combinator::{map_res, opt, recognize, value},
-    error,
-    error::FromExternalError,
+    error::{self, FromExternalError},
     multi::*,
     sequence::{delimited, preceded, terminated, tuple},
     IResult, Parser,
@@ -115,8 +113,8 @@ pub(crate) fn text_fast(mut s: &[u8]) -> IResult<&[u8], Text<'_>> {
 fn line(style: Style) -> impl Fn(&[u8]) -> IResult<&[u8], (Line<'static>, Style)> {
     // let style_: Style = Default::default();
     move |s: &[u8]| -> IResult<&[u8], (Line<'static>, Style)> {
-        let (s, mut text) = take_while(|c| c != b'\n')(s)?;
-        let (s, _) = opt(tag("\n"))(s)?;
+        let (s, mut text) = not_line_ending(s)?;
+        let (s, _) = opt(alt((tag("\r\n"), tag("\n"))))(s)?;
         let mut spans = Vec::new();
         let mut last = style;
         while let Ok((s, span)) = span(last)(text) {
@@ -140,8 +138,8 @@ fn line(style: Style) -> impl Fn(&[u8]) -> IResult<&[u8], (Line<'static>, Style)
 fn line_fast(style: Style) -> impl Fn(&[u8]) -> IResult<&[u8], (Line<'_>, Style)> {
     // let style_: Style = Default::default();
     move |s: &[u8]| -> IResult<&[u8], (Line<'_>, Style)> {
-        let (s, mut text) = take_while(|c| c != b'\n')(s)?;
-        let (s, _) = opt(tag("\n"))(s)?;
+        let (s, mut text) = not_line_ending(s)?;
+        let (s, _) = opt(alt((tag("\r\n"), tag("\n"))))(s)?;
         let mut spans = Vec::new();
         let mut last = style;
         while let Ok((s, span)) = span_fast(last)(text) {
@@ -168,14 +166,12 @@ fn span(last: Style) -> impl Fn(&[u8]) -> IResult<&[u8], Span<'static>, nom::err
         let (s, style) = opt(style(last))(s)?;
 
         #[cfg(feature = "simd")]
-        let (s, text) = map_res(take_while(|c| c != b'\x1b' && c != b'\n'), |t| {
+        let (s, text) = map_res(take_while(|c| c != b'\x1b'), |t| {
             simdutf8::basic::from_utf8(t)
         })(s)?;
 
         #[cfg(not(feature = "simd"))]
-        let (s, text) = map_res(take_while(|c| c != b'\x1b' && c != b'\n'), |t| {
-            std::str::from_utf8(t)
-        })(s)?;
+        let (s, text) = map_res(take_while(|c| c != b'\x1b'), |t| std::str::from_utf8(t))(s)?;
 
         if let Some(style) = style.flatten() {
             last = last.patch(style);
@@ -192,14 +188,12 @@ fn span_fast(last: Style) -> impl Fn(&[u8]) -> IResult<&[u8], Span<'_>, nom::err
         let (s, style) = opt(style(last))(s)?;
 
         #[cfg(feature = "simd")]
-        let (s, text) = map_res(take_while(|c| c != b'\x1b' && c != b'\n'), |t| {
+        let (s, text) = map_res(take_while(|c| c != b'\x1b'), |t| {
             simdutf8::basic::from_utf8(t)
         })(s)?;
 
         #[cfg(not(feature = "simd"))]
-        let (s, text) = map_res(take_while(|c| c != b'\x1b' && c != b'\n'), |t| {
-            std::str::from_utf8(t)
-        })(s)?;
+        let (s, text) = map_res(take_while(|c| c != b'\x1b'), |t| std::str::from_utf8(t))(s)?;
 
         if let Some(style) = style.flatten() {
             last = last.patch(style);

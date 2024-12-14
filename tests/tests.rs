@@ -69,6 +69,25 @@ fn test_ascii_newlines() {
 }
 
 #[test]
+fn test_ascii_carriage_return_line_feed() {
+    let bytes = "LINE_1\r\n\r\n\r\n\r\n\r\n\r\n\r\nLINE_8"
+        .as_bytes()
+        .to_vec();
+    let output = Text::from(vec![
+        Line::from("LINE_1"),
+        Line::from(""),
+        Line::from(""),
+        Line::from(""),
+        Line::from(""),
+        Line::from(""),
+        Line::from(""),
+        Line::from("LINE_8"),
+    ]);
+
+    test_both(bytes, output);
+}
+
+#[test]
 fn test_reset() {
     let string = "\x1b[33mA\x1b[0mB";
     let output = Text::from(Line::from(vec![
